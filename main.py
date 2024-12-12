@@ -120,6 +120,16 @@ class SerialChatGUI:
         # Start port update thread
         self.update_ports_thread = threading.Thread(target=self.update_ports_loop, daemon=True)
         self.update_ports_thread.start()
+        # Device selection with port info
+        self.port_var = tk.StringVar()
+        self.port_info = {}  # Store port information
+        self.port_combo = ttk.Combobox(control_frame, textvariable=self.port_var, width=50)
+        self.port_combo.grid(row=0, column=0, padx=5, sticky='ew')
+        self.port_combo.bind('<<ComboboxSelected>>', self.on_port_selected)
+        
+        # Info label for additional port details
+        self.port_info_label = ttk.Label(control_frame, text="", wraplength=400)
+        self.port_info_label.grid(row=1, column=0, columnspan=5, padx=5, pady=(2, 0), sticky='w')
         
         # Set minimum window size
         self.root.update()
@@ -138,16 +148,36 @@ class SerialChatGUI:
         """Continuously update the available ports list."""
         while self.running:
             ports = []
+            self.port_info = {}
+            
             for port in serial.tools.list_ports.comports():
+                # Create a detailed port description
+                description = f"{port.device}"
+                if port.description:
+                    description += f" - {port.description}"
+                
+                # Store additional information
+                self.port_info[description] = {
+                    'device': port.device,
+                    'name': port.name,
+                    'description': port.description,
+                    'hwid': port.hwid,
+                    'vid': port.vid,
+                    'pid': port.pid,
+                    'serial_number': port.serial_number,
+                    'manufacturer': port.manufacturer,
+                    'product': port.product,
+                }
+                
                 # Windows: COM ports
                 if sys.platform.startswith('win'):
                     if 'COM' in port.device:
-                        ports.append(port.device)
+                        ports.append(description)
                 # Linux/Unix: tty devices
                 else:
                     if ('tty' in port.device.lower() and
                         ('acm' in port.device.lower() or 'usb' in port.device.lower())):
-                        ports.append(port.device)
+                        ports.append(description)
             
             self.root.after(0, lambda: self.update_ports_list(ports))
             time.sleep(2)
@@ -160,26 +190,53 @@ class SerialChatGUI:
             self.port_var.set(current)
         elif ports:
             self.port_var.set(ports[0])
+            self.update_port_info(ports[0])
+    
+    def on_port_selected(self, event):
+        """Handle port selection change."""
+        selected = self.port_var.get()
+        self.update_port_info(selected)
+    
+    def update_port_info(self, selected):
+        """Update the port information label."""
+        if selected in self.port_info:
+            info = self.port_info[selected]
+            details = []
+            
+            if info['manufacturer']:
+                details.append(f"Manufacturer: {info['manufacturer']}")
+            if info['product']:
+                details.append(f"Product: {info['product']}")
+            if info['serial_number']:
+                details.append(f"Serial: {info['serial_number']}")
+            if info['vid'] is not None and info['pid'] is not None:
+                details.append(f"VID:PID = {info['vid']:04X}:{info['pid']:04X}")
+            
+            info_text = " | ".join(details) if details else "No additional information available"
+            self.port_info_label.configure(text=info_text)
+        else:
+            self.port_info_label.configure(text="")
     
     def toggle_connection(self):
         """Handle connection/disconnection to serial port."""
         if not self.is_connected:
             try:
-                port = self.port_var.get()
-                baud = int(self.baud_var.get())
-                self.serial_port = serial.Serial(port, baud, timeout=0.1)
-                self.is_connected = True
-                self.connect_button.configure(text="Disconnect")
-                self.add_message(f"Connected to {port} at {baud} baud", "system")
-                
-                # Start reading thread
-                self.read_thread = threading.Thread(target=self.read_serial, daemon=True)
-                self.read_thread.start()
+                selected = self.port_var.get()
+                if selected in self.port_info:
+                    port = self.port_info[selected]['device']
+                    baud = int(self.baud_var.get())
+                    self.serial_port = serial.Serial(port, baud, timeout=0.1)
+                    self.is_connected = True
+                    self.connect_button.configure(text="Disconnect")
+                    self.add_message(f"Connected to {selected} at {baud} baud", "system")
+                    
+                    # Start reading thread
+                    self.read_thread = threading.Thread(target=self.read_serial, daemon=True)
+                    self.read_thread.start()
             except Exception as e:
                 self.add_message(f"Connection error: {str(e)}", "error")
         else:
-            self.disconnect()
-    
+            self.disconnect()    
     def disconnect(self):
         """Disconnect from serial port."""
         if self.serial_port:
