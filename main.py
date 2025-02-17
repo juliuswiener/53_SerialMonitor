@@ -284,32 +284,41 @@ class SerialChatGUI:
                 break
 
     def send_message(self):
-        """Send message to serial port."""
-        message = self.message_var.get().strip()
-        if message and self.is_connected:
-            try:
-                # Check if the message is a hex string
-                if message.startswith('0x') or message.startswith('0X'):
-                    # Convert hex string to bytes
-                    try:
-                        # Remove 0x prefix and spaces
-                        hex_str = message[2:].replace(' ', '')
-                        data = bytes.fromhex(hex_str)
-                        self.serial_port.write(data)
-                        self.add_message(f"[HEX] {' '.join([f'{b:02X}' for b in data])}", "sent")
-                    except ValueError as e:
-                        self.add_message(f"Invalid hex format: {str(e)}", "error")
-                        return
-                else:
-                    # Normal text message
-                    self.serial_port.write(f"{message}\n".encode())
-                    self.add_message(message, "sent")
-                
-                self.command_history.append(message)
-                self.history_position = -1
-                self.message_var.set("")
-            except Exception as e:
-                self.add_message(f"Send error: {str(e)}", "error")
+        """Send message(s) to the serial port, handling semicolons."""
+        message_input = self.message_var.get().strip()
+        if message_input and self.is_connected:
+            # Split the input by semicolons
+            messages = message_input.split(';')
+            for message in messages:
+                message = message.strip()  # Remove leading/trailing spaces from each command
+                if not message: # Skip empty strings that happen from ;;
+                    continue
+                try:
+                    # Check if the message is a hex string
+                    if message.startswith(('0x', '0X')):
+                        # Convert hex string to bytes
+                        try:
+                            # Remove 0x prefix and spaces
+                            hex_str = message[2:].replace(' ', '')
+                            data = bytes.fromhex(hex_str)
+                            self.serial_port.write(data)
+                            self.add_message(f"[HEX] {' '.join([f'{b:02X}' for b in data])}", "sent")
+                        except ValueError as e:
+                            self.add_message(f"Invalid hex format: {str(e)}", "error")
+                            return # Stop if one sub-command is bad.
+                    else:
+                        # Normal text message
+                        self.serial_port.write(f"{message}\n".encode())
+                        self.add_message(message, "sent")
+
+                except Exception as e:
+                    self.add_message(f"Send error: {str(e)}", "error")
+                    return # Important:  Stop if there is a send error.
+
+            # Only update history/input *after* successful sends.
+            self.command_history.append(message_input)
+            self.history_position = -1
+            self.message_var.set("")
     
     def add_message(self, message, message_type):
         """Add message to chat display."""
