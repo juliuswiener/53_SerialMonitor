@@ -310,11 +310,11 @@ class SerialChatGUI:
                         # Normal text message
                         self.serial_port.write(f"{message}\n".encode())
                         self.add_message(message, "sent")
+                        time.sleep(0.05) #Brief pause 
 
                 except Exception as e:
                     self.add_message(f"Send error: {str(e)}", "error")
                     return # Important:  Stop if there is a send error.
-
             # Only update history/input *after* successful sends.
             self.command_history.append(message_input)
             self.history_position = -1
@@ -456,10 +456,8 @@ class SerialChatGUI:
                         self.root.after(100, self.attempt_reconnect)  # Small delay to let GUI update
                         break
                 
-                time.sleep(2)  # Wait before next attempt
             except Exception as e:
                 self.root.after(0, lambda: self.add_message(f"Reconnection error: {str(e)}", "error"))
-                time.sleep(2)
         
         self.attempting_reconnect = False
 
